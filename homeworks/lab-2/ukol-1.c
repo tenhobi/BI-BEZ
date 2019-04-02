@@ -2,50 +2,73 @@
 #include <string.h>
 #include <openssl/evp.h>
 
+#define MESSAGE_LENGTH 42
+
+void textGenerator(unsigned char *message);
+
+void findHashMessage(EVP_MD_CTX *ctx, const EVP_MD *type, unsigned char *hash, int *length);
+
 int main(int argc, char *argv[]) {
-    int i, res;
-    char text[] = "Text pro hash.";
-    char hashFunction[] = "sha1";  // zvolena hashovaci funkce ("sha1", "md5" ...)
+    // initialization
+    char hashFunction[] = "sha256";
+    EVP_MD_CTX *ctx;
+    const EVP_MD *type;
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    int length;
 
-    EVP_MD_CTX *ctx;  // struktura kontextu
-    const EVP_MD *type; // typ pouzite hashovaci funkce
-    unsigned char hash[EVP_MAX_MD_SIZE]; // char pole pro hash - 64 bytu (max pro sha 512)
-    int length;  // vysledna delka hashe
-
-    /* Inicializace OpenSSL hash funkci */
+    srand(time(NULL));
     OpenSSL_add_all_digests();
-    /* Zjisteni, jaka hashovaci funkce ma byt pouzita */
     type = EVP_get_digestbyname(hashFunction);
 
-    /* Pokud predchozi prirazeni vratilo -1, tak nebyla zadana spravne hashovaci funkce */
     if (!type) {
         printf("Hash %s neexistuje.\n", hashFunction);
         exit(1);
     }
 
-    ctx = EVP_MD_CTX_create(); // create context for hashing
+    // create context
+    ctx = EVP_MD_CTX_create();
     if (ctx == NULL) exit(2);
 
-    /* Hash the text */
-    res = EVP_DigestInit_ex(ctx, type, NULL); // context setup for our hash type
-    if (res != 1) exit(3);
-    res = EVP_DigestUpdate(ctx, text, strlen(text)); // feed the message in
-    if (res != 1) exit(4);
-    res = EVP_DigestFinal_ex(ctx, hash, (unsigned int *) &length); // get the hash
-    if (res != 1) exit(5);
+    // find message
+    findHashMessage(ctx, type, hash, &length);
 
-    EVP_MD_CTX_destroy(ctx); // destroy the context
+    // destroy context
+    EVP_MD_CTX_destroy(ctx);
+}
 
-    /* Vypsani vysledneho hashe */
-    printf("Hash textu \"%s\" je: ", text);
-    for (i = 0; i < length; i++) {
+void findHashMessage(EVP_MD_CTX *ctx, const EVP_MD *type, unsigned char *hash, int *length) {
+    unsigned char message[MESSAGE_LENGTH + 1] = {0};
+
+    // find the right hash
+    while ((hash[0] != 0xAA) || (hash[1] != 0xBB)) {
+        int res;
+
+        // generate message
+        textGenerator(message);
+
+        res = EVP_DigestInit_ex(ctx, type, NULL);
+        if (res != 1) exit(3);
+        res = EVP_DigestUpdate(ctx, message, MESSAGE_LENGTH);
+        if (res != 1) exit(4);
+        res = EVP_DigestFinal_ex(ctx, hash, (unsigned int *) length);
+        if (res != 1) exit(5);
+    }
+
+    printf("message: '%s'"
+           "\nhash: ", message);
+
+    for (int i = 0; i < (*length); i++) {
         printf("%02x ", hash[i]);
     }
     printf("\n");
-    for (i = 0; i < length; i++) {
-        printf("%d ", hash[i]);
-    }
-    printf("\n");
+}
 
-    exit(0);
+void textGenerator(unsigned char *message) {
+    char chars[] = "123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    for (int i = 0; i < MESSAGE_LENGTH; i++) {
+        // randomly select one char from chars
+        int position = rand() % (sizeof(chars) - 1);
+        message[i] = chars[position];
+    }
 }
