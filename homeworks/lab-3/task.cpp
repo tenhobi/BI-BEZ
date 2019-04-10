@@ -22,13 +22,13 @@ enum class METHOD {
     DECRYPT
 };
 
+int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, METHOD method);
+
 std::string removeExtension(const std::string &fileName);
 
 std::string getModeName(MODE mode);
 
 bool isFileBMP(char a, char b);
-
-int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, METHOD method);
 
 int main(int argc, char *argv[]) {
     // Check number of parameters.
@@ -97,30 +97,6 @@ int main(int argc, char *argv[]) {
 
     inputFile.close();
     std::cout << "Success." << std::endl;
-}
-
-std::string removeExtension(const std::string &fileName) {
-    auto match = fileName.find(".bmp");
-    return fileName.substr(0, match);
-}
-
-std::string getModeName(const MODE mode) {
-    if (mode == MODE::CBC) {
-        return "cbc";
-    } else if (mode == MODE::ECB) {
-        return "ecb";
-    }
-
-    return "error";
-}
-
-bool isFileBMP(char a, char b) {
-    if (a != 'B' && b != 'M') {
-        std::cout << "File is not a BMP." << std::endl;
-        return false;
-    }
-
-    return true;
 }
 
 int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, METHOD method) {
@@ -205,7 +181,7 @@ int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, MET
         return 11;
     }
     res = EVP_CipherUpdate(ctx, reinterpret_cast<unsigned char *>(outputData), &tmpLength,
-                            reinterpret_cast<const unsigned char *>(data), dataLength);
+                           reinterpret_cast<const unsigned char *>(data), dataLength);
     if (res != 1) {
         std::cout << "Error in encryption." << std::endl;
         return 12;
@@ -237,4 +213,28 @@ int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, MET
     // Clean up.
     EVP_CIPHER_CTX_free(ctx);
     return 0;
+}
+
+std::string removeExtension(const std::string &fileName) {
+    auto match = fileName.find(".bmp");
+    return fileName.substr(0, match);
+}
+
+std::string getModeName(const MODE mode) {
+    if (mode == MODE::CBC) {
+        return "cbc";
+    } else if (mode == MODE::ECB) {
+        return "ecb";
+    }
+
+    return "error";
+}
+
+bool isFileBMP(char a, char b) {
+    if (a != 'B' && b != 'M') {
+        std::cout << "File is not a BMP." << std::endl;
+        return false;
+    }
+
+    return true;
 }
