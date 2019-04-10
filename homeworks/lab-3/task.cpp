@@ -171,7 +171,7 @@ int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, MET
     inputFile.read(data, dataLength);
 
     // Prepare output data storage.
-    char *outputData = new char[dataLength];
+    char *outputData = new char[((dataLength + 7) * 8) / 8];
     long outputDataLength = 0;
     int tmpLength = 0;
 
