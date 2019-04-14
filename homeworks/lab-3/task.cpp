@@ -123,11 +123,12 @@ int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, MET
     }
 
     // Load file size data.
-    char fileSizeData[4];
+    long fileSizeDataLength = 4;
+    char *fileSizeData = new char[fileSizeDataLength];
     inputFile.seekg(2, std::fstream::beg);
-    inputFile.read(fileSizeData, 4);
+    inputFile.read(fileSizeData, fileSizeDataLength);
     long fileLength = 0;
-    for (int x = 0; x < 4; x++) {
+    for (int x = 0; x < fileSizeDataLength; x++) {
         fileLength += (unsigned long) fileSizeData[x] << (unsigned long) (8 * x);
     }
 
@@ -170,33 +171,9 @@ int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, MET
     char *data = new char[dataLength];
     inputFile.read(data, dataLength);
 
-    // Prepare output data storage.
-    char *outputData = new char[((dataLength + 7) * 8) / 8];
-    long outputDataLength = 0;
-    int tmpLength = 0;
-
-    res = EVP_CipherInit_ex(ctx, cipher, nullptr, key, iv, method == METHOD::ENCRYPT ? 1 : 0);
-    if (res != 1) {
-        std::cout << "Error in encryption." << std::endl;
-        return 11;
-    }
-    res = EVP_CipherUpdate(ctx, reinterpret_cast<unsigned char *>(outputData), &tmpLength,
-                           reinterpret_cast<const unsigned char *>(data), dataLength);
-    if (res != 1) {
-        std::cout << "Error in encryption." << std::endl;
-        return 12;
-    }
-    outputDataLength += tmpLength;
-    res = EVP_CipherFinal_ex(ctx, reinterpret_cast<unsigned char *>(outputData + outputDataLength), &tmpLength);
-    if (res != 1) {
-        std::cout << "Error in encryption." << std::endl;
-        return 13;
-    }
-    outputDataLength += tmpLength;
-
     // Everything is OK, open outputFile.
     std::fstream outputFile;
-    outputFile.open(outputFileName, std::ifstream::out | std::ifstream::binary);
+    outputFile.open(outputFileName, std::ifstream::in | std::ifstream::out | std::ifstream::binary);
 
     if (!outputFile.is_open()) {
         std::cout << "Error: Couldn't open the output file." << std::endl;
@@ -204,11 +181,56 @@ int process(std::fstream &inputFile, std::string &outputFileName, MODE mode, MET
     }
 
     // Write header data.
-    headerData[2] = outputDataLength + headerLength;
     outputFile.write(headerData, headerLength);
 
-    // Write data data.
-    outputFile.write(outputData, outputDataLength);
+    // Init cipher.
+    res = EVP_CipherInit_ex(ctx, cipher, nullptr, key, iv, method == METHOD::ENCRYPT ? 1 : 0);
+    if (res != 1) {
+        std::cout << "Error in encryption – init." << std::endl;
+        return 11;
+    }
+
+    // Prepare output data storage.
+    int inputBufferLength = 1024;
+    int outputBufferLength = inputBufferLength + 4 * EVP_MAX_BLOCK_LENGTH;
+    char *inputBufferData = new char[inputBufferLength];
+    char *outputBufferData = new char[outputBufferLength];
+    long outputDataLength = 0;
+    int tmpLength = 0;
+
+    inputFile.seekg(headerLength, std::fstream::beg);
+
+    // Process data.
+    while (true) {
+        if (inputFile.eof()) {
+            break;
+        }
+
+        inputFile.read(inputBufferData, inputBufferLength);
+
+        res = EVP_CipherUpdate(ctx, reinterpret_cast<unsigned char *>(outputBufferData), &tmpLength,
+                               reinterpret_cast<const unsigned char *>(inputBufferData), inputFile.gcount());
+        if (res != 1) {
+            std::cout << "Error in encryption – update." << std::endl;
+            return 12;
+        }
+
+        outputDataLength += tmpLength;
+        outputFile.write(outputBufferData, tmpLength);
+    }
+
+    res = EVP_CipherFinal_ex(ctx, reinterpret_cast<unsigned char *>(outputBufferData), &tmpLength);
+    if (res != 1) {
+        std::cout << "Error in encryption – final." << std::endl;
+        return 13;
+    }
+    outputDataLength += tmpLength;
+    outputFile.write(outputBufferData, tmpLength);
+
+    // Update header data with file length.
+    fileSizeData[0] = outputDataLength + headerLength;
+    outputFile.seekg(2);
+    outputFile.write(fileSizeData, fileSizeDataLength);
 
     // Clean up.
     EVP_CIPHER_CTX_free(ctx);
